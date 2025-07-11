@@ -246,9 +246,9 @@ app.get('/api/leads/:id', async (req, res) => {
                  collect(DISTINCT i { .name, .descricao }) AS interesses,
                  collect(DISTINCT s { .name, .descricao }) AS solucoesDiscutidas,
                  collect(DISTINCT cm {.*, id: elementId(cm)}) AS memoriasConceituais,
-                 collect(DISTINCT ph { .planName, .stepName, .status, .timestamp, .details }) AS plannerHistory ORDER BY ph.timestamp DESC LIMIT 5, // Últimos 5 eventos do planner
-                 collect(DISTINCT refl { .summary, .focusType, .timestamp }) AS recentReflections ORDER BY refl.timestamp DESC LIMIT 3, // Últimas 3 reflexões (resumo)
-                 collect(DISTINCT hyp { .interpretation, .confidence, .timestamp }) AS recentHypotheses ORDER BY hyp.timestamp DESC LIMIT 3 // Últimas 3 hipóteses (resumo)
+                 collect(DISTINCT ph { .planName, .stepName, .status, .timestamp, .details }) AS plannerHistory, // Últimos 5 eventos do planner (truncated to avoid invalid ORDER BY/LIMIT inside collect)
+                 collect(DISTINCT refl { .summary, .focusType, .timestamp }) AS recentReflections, // Últimas 3 reflexões (resumo) - ORDER BY/LIMIT removidos
+                 collect(DISTINCT hyp { .interpretation, .confidence, .timestamp }) AS recentHypotheses // Últimas 3 hipóteses (resumo) - ORDER BY/LIMIT removidos
 
             RETURN l {
                 .*,
@@ -1041,8 +1041,8 @@ app.get('/api/leads', async (req, res) => {
         if (dtAtualizacaoStart) { const dt = new Date(dtAtualizacaoStart); dt.setHours(0,0,0,0); whereClauses.push("l.dtUltimaAtualizacao >= $dtAtualizacaoStartMillis"); params.dtAtualizacaoStartMillis = neo4j.int(dt.getTime()); }
         if (dtAtualizacaoEnd) { const dt = new Date(dtAtualizacaoEnd); dt.setHours(23,59,59,999); whereClauses.push("l.dtUltimaAtualizacao <= $dtAtualizacaoEndMillis"); params.dtAtualizacaoEndMillis = neo4j.int(dt.getTime()); }
 
-        if (tag) { matchClauses.push("MATCH (l)-[:TEM_TAG]->(tg:Tag WHERE tg.nome = $tag)"); params.tag = tag; }
-        if (dor) { matchClauses.push("MATCH (l)-[:TEM_DOR]->(dr:Dor WHERE dr.nome = $dor)"); params.dor = dor; }
+        if (tag) { matchClauses.push("MATCH (l)-[:TEM_TAG]->(tg:Tag)"); whereClauses.push("tg.nome = $tag"); params.tag = tag; }
+        if (dor) { matchClauses.push("MATCH (l)-[:TEM_DOR]->(dr:Dor)"); whereClauses.push("dr.nome = $dor"); params.dor = dor; }
 
         const baseQuery = `${matchClauses.join(" ")} ${whereClauses.length > 0 ? "WHERE " + whereClauses.join(" AND ") : ""}`;
         
@@ -1389,7 +1389,7 @@ app.get('/api/agent/avg-interactions', async (req,res)=>{
 });
 
 // Analytics overview
-app.get('/api/analytics/overview', async (req,res)=>{
+app.get('/api/analytics/overview-legacy', async (req,res)=>{
     const neo4jSession=await getSession();
     try{
         const refl=(await neo4jSession.run('MATCH (r:Reflection) RETURN count(r) AS c')).records[0].get('c').toNumber();
@@ -1400,7 +1400,7 @@ app.get('/api/analytics/overview', async (req,res)=>{
     }catch(e){res.status(500).json({error:'overview'});}finally{await closeSession(neo4jSession);}  
 });
 
-app.get('/api/analytics/sentiment-distribution', async (req,res)=>{
+app.get('/api/analytics/sentiment-distribution-legacy', async (req,res)=>{
     const neo4jSession=await getSession();
     try{
         const result=await neo4jSession.run('MATCH (r:Reflection) WHERE r.sentimentoInferidoDoLead IS NOT NULL RETURN r.sentimentoInferidoDoLead AS s, count(r) AS c');
